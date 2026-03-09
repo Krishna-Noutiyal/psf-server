@@ -1,8 +1,16 @@
+
 # PSFserver
+
+![PSFserver Banner](assets/banner.png)
+
+A lightweight, zero-dependency HTTP file server for Windows written in PowerShell. Serves any directory over HTTP with a clean dark web interface — perfect for local development, LAN file sharing, and quick one-off transfers.
+
+---
 
 A lightweight, zero-dependency HTTP file server for Windows written in PowerShell. Serves any directory over HTTP with a clean dark web interface — useful for local development, LAN file sharing, and quick one-off transfers.
 
 ---
+
 
 ## Features
 
@@ -19,6 +27,7 @@ A lightweight, zero-dependency HTTP file server for Windows written in PowerShel
 
 ---
 
+
 ## Requirements
 
 - Windows with PowerShell 5.1 or PowerShell 7+
@@ -26,56 +35,72 @@ A lightweight, zero-dependency HTTP file server for Windows written in PowerShel
 
 ---
 
+
 ## Quick Start
+
+### 1. Download & Extract
+
+Clone or download this repository. Place the files anywhere you want to serve.
+
+### 2. Run the Server
+
+Open PowerShell **as Administrator** and run:
 
 ```powershell
 # Serve the current directory on port 8080
-.\psfserver.ps1
-
-# Serve a specific folder
-.\psfserver.ps1 -Path "C:\Projects" -Port 9000
+./psfserver.ps1
 ```
 
-Then open [http://localhost:8080](http://localhost:8080) in your browser.
+Or specify a folder and port:
+
+```powershell
+./psfserver.ps1 -Path "C:\Projects" -Port 9000
+```
+
+### 3. Access in Browser
+
+Open [http://localhost:8080](http://localhost:8080) in your browser. The web UI will show your files and folders.
 
 ---
+
 
 ## Parameters
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `-Path` | `string` | Current directory | Directory to serve |
-| `-Port` | `int` | `8080` | Port to listen on |
-| `-Title` | `string` | `FileServe` | Server name shown in the UI and header |
-| `-AllowUpload` | `switch` | off | Enable file uploads via drag-and-drop or file picker |
-| `-ShowHidden` | `switch` | off | Include hidden and system files in directory listings |
-| `-LogRequests` | `switch` | off | Print each request to the console with timestamp and IP |
-| `-OpenBrowser` | `switch` | off | Automatically open the browser on startup |
-| `-Auth` | `string` | `""` | Enable HTTP Basic Auth. Format: `"username:password"` |
-| `-MaxUploadMB` | `int` | `100` | Maximum allowed upload size in megabytes |
+| Parameter      | Type     | Default           | Description                                      |
+|---------------|----------|-------------------|--------------------------------------------------|
+| `-Path`       | string   | Current directory  | Directory to serve                               |
+| `-Port`       | int      | 8080              | Port to listen on                                |
+| `-Title`      | string   | FileServe         | Server name shown in the UI and header            |
+| `-AllowUpload`| switch   | off               | Enable file uploads via drag-and-drop or picker   |
+| `-ShowHidden` | switch   | off               | Include hidden/system files in listings           |
+| `-LogRequests`| switch   | off               | Print each request to console with timestamp/IP   |
+| `-OpenBrowser`| switch   | off               | Automatically open browser on startup             |
+| `-Auth`       | string   | ""                | Enable HTTP Basic Auth. Format: "username:password"|
+| `-MaxUploadMB`| int      | 100               | Maximum allowed upload size (MB)                  |
 
 ---
 
-## Examples
+
+## Usage Examples
 
 **Share a folder on your local network:**
 ```powershell
-.\psfserver.ps1 -Path "D:\Shared" -Port 8080
+./psfserver.ps1 -Path "D:\Shared" -Port 8080
 ```
 
 **Enable uploads with a 500 MB limit:**
 ```powershell
-.\psfserver.ps1 -AllowUpload -MaxUploadMB 500
+./psfserver.ps1 -AllowUpload -MaxUploadMB 500
 ```
 
-**Password-protected psfserver with request logging:**
+**Password-protected server with request logging:**
 ```powershell
-.\psfserver.ps1 -Auth "alice:s3cr3t" -LogRequests
+./psfserver.ps1 -Auth "alice:s3cr3t" -LogRequests
 ```
 
 **Full example — custom title, uploads, hidden files, auto-open:**
 ```powershell
-.\psfserver.ps1 `
+./psfserver.ps1 `
   -Path "C:\Projects" `
   -Port 3000 `
   -Title "Dev Server" `
@@ -87,11 +112,12 @@ Then open [http://localhost:8080](http://localhost:8080) in your browser.
 
 ---
 
+
 ## Running as Administrator
 
-The psfserver requires administrator privileges to bind an HTTP listener on Windows. Right-click PowerShell and choose **Run as Administrator**, then run the script.
+PSFserver requires administrator privileges to bind an HTTP listener. Right-click PowerShell and choose **Run as Administrator**, then run the script.
 
-Alternatively, you can register a URL reservation to avoid needing admin rights every time:
+Alternatively, register a URL reservation to avoid needing admin rights every time:
 
 ```powershell
 # Run once as Administrator to reserve the URL
@@ -102,25 +128,27 @@ After that, the script can be run as a normal user for that specific port.
 
 ---
 
+
 ## MIME Type Support
 
 FileServe maps 50+ extensions to the correct Content-Type header so browsers open files natively rather than triggering unnecessary downloads.
 
-| Category | Extensions |
-|---|---|
-| Web | `.html` `.css` `.js` `.json` `.xml` `.svg` |
-| Images | `.png` `.jpg` `.gif` `.webp` `.bmp` `.ico` |
-| Video | `.mp4` `.webm` `.avi` `.mov` `.mkv` |
-| Audio | `.mp3` `.wav` `.ogg` `.flac` `.aac` |
-| Documents | `.pdf` `.txt` `.md` `.csv` `.log` |
-| Archives | `.zip` `.gz` `.tar` `.7z` `.rar` |
-| Code | `.py` `.go` `.rs` `.ts` `.java` `.c` `.cpp` `.cs` `.rb` `.php` `.ps1` `.sh` |
-| Config | `.yaml` `.toml` `.ini` `.conf` |
-| Fonts | `.woff` `.woff2` `.ttf` |
+| Category   | Extensions |
+|------------|------------|
+| Web        | .html .css .js .json .xml .svg |
+| Images     | .png .jpg .gif .webp .bmp .ico |
+| Video      | .mp4 .webm .avi .mov .mkv |
+| Audio      | .mp3 .wav .ogg .flac .aac |
+| Documents  | .pdf .txt .md .csv .log |
+| Archives   | .zip .gz .tar .7z .rar |
+| Code       | .py .go .rs .ts .java .c .cpp .cs .rb .php .ps1 .sh |
+| Config     | .yaml .toml .ini .conf |
+| Fonts      | .woff .woff2 .ttf |
 
 Unknown extensions fall back to `application/octet-stream`.
 
 ---
+
 
 ## Security Notes
 
@@ -131,11 +159,13 @@ Unknown extensions fall back to `application/octet-stream`.
 
 ---
 
+
 ## Stopping the Server
 
 Press `Ctrl+C` in the terminal window where the server is running. The listener is stopped and disposed cleanly in a `finally` block.
 
 ---
+
 
 ## License
 
