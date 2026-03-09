@@ -1,5 +1,5 @@
 # ============================================================
-#  FileServe — PowerShell HTTP File Server
+#  PSFServer — PowerShell HTTP File Server
 #  Save this file as UTF-8 (with or without BOM) to preserve
 #  any emoji/Unicode characters in the output.
 # ============================================================
@@ -7,7 +7,7 @@
 param(
     [string]$Path         = (Get-Location).Path,
     [int]$Port            = 8080,
-    [string]$Title        = "FileServe",
+    [string]$Title        = "PSFServer",
     [switch]$AllowUpload,
     [switch]$ShowHidden,
     [switch]$LogRequests,

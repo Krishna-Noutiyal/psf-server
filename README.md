@@ -1,4 +1,4 @@
-# FileServe
+# PSFserver
 
 A lightweight, zero-dependency HTTP file server for Windows written in PowerShell. Serves any directory over HTTP with a clean dark web interface — useful for local development, LAN file sharing, and quick one-off transfers.
 
@@ -30,10 +30,10 @@ A lightweight, zero-dependency HTTP file server for Windows written in PowerShel
 
 ```powershell
 # Serve the current directory on port 8080
-.\server.ps1
+.\psfserver.ps1
 
 # Serve a specific folder
-.\server.ps1 -Path "C:\Projects" -Port 9000
+.\psfserver.ps1 -Path "C:\Projects" -Port 9000
 ```
 
 Then open [http://localhost:8080](http://localhost:8080) in your browser.
@@ -60,22 +60,22 @@ Then open [http://localhost:8080](http://localhost:8080) in your browser.
 
 **Share a folder on your local network:**
 ```powershell
-.\server.ps1 -Path "D:\Shared" -Port 8080
+.\psfserver.ps1 -Path "D:\Shared" -Port 8080
 ```
 
 **Enable uploads with a 500 MB limit:**
 ```powershell
-.\server.ps1 -AllowUpload -MaxUploadMB 500
+.\psfserver.ps1 -AllowUpload -MaxUploadMB 500
 ```
 
-**Password-protected server with request logging:**
+**Password-protected psfserver with request logging:**
 ```powershell
-.\server.ps1 -Auth "alice:s3cr3t" -LogRequests
+.\psfserver.ps1 -Auth "alice:s3cr3t" -LogRequests
 ```
 
 **Full example — custom title, uploads, hidden files, auto-open:**
 ```powershell
-.\server.ps1 `
+.\psfserver.ps1 `
   -Path "C:\Projects" `
   -Port 3000 `
   -Title "Dev Server" `
@@ -89,7 +89,7 @@ Then open [http://localhost:8080](http://localhost:8080) in your browser.
 
 ## Running as Administrator
 
-The server requires administrator privileges to bind an HTTP listener on Windows. Right-click PowerShell and choose **Run as Administrator**, then run the script.
+The psfserver requires administrator privileges to bind an HTTP listener on Windows. Right-click PowerShell and choose **Run as Administrator**, then run the script.
 
 Alternatively, you can register a URL reservation to avoid needing admin rights every time:
 
@@ -125,7 +125,7 @@ Unknown extensions fall back to `application/octet-stream`.
 ## Security Notes
 
 - **Path traversal** — all requests are resolved and validated against the root path before serving. Requests that escape the root are rejected with `403 Forbidden`.
-- **Auth is HTTP Basic** — credentials are sent in plain text. Do not expose the server to the public internet without a reverse proxy handling TLS.
+- **Auth is HTTP Basic** — credentials are sent in plain text. Do not expose the psfserver to the public internet without a reverse proxy handling TLS.
 - **Upload filenames** — uploaded filenames are validated to block characters that could lead to path injection (`/ \ : < > " | ? *`).
 - **Upload size** — requests exceeding `-MaxUploadMB` are rejected with `413 Request Entity Too Large`.
 
