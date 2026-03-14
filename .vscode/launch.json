@@ -1,0 +1,22 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "PowerShell: Run as Admin",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "Start-Process pwsh -ArgumentList '-ExecutionPolicy ByPass -File \"${workspaceFolder}/psfserver.ps1\"' -Verb RunAs",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "PowerShell: All Flags Enabled",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "Start-Process pwsh -ArgumentList '-ExecutionPolicy ByPass -File \"${workspaceFolder}/psfserver.ps1\" -Path \"F:\\\\\" -AllowUpload -ShowHidden -LogRequests -OpenBrowser -Auth \"krish:1234\"' -Verb RunAs",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

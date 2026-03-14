@@ -18,7 +18,8 @@ param(
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-#region ── Startup Checks ────────────────────────────────────
+
+#region Startup Checks 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     Write-Host "  ERROR  Requires administrator privileges. Run as Administrator." -ForegroundColor Red
@@ -31,7 +32,7 @@ if (-not (Test-Path -Path $Path -PathType Container)) {
 $rootPath = (Resolve-Path -Path $Path).Path
 #endregion
 
-#region ── Auth Setup ────────────────────────────────────────
+#region Auth Setup 
 $useAuth      = $false
 $authExpected = ""
 if ($Auth -ne "") {
@@ -45,7 +46,7 @@ if ($Auth -ne "") {
 }
 #endregion
 
-#region ── MIME Types ────────────────────────────────────────
+#region MIME Types 
 $mimeTypes = @{
     ".html"=  "text/html; charset=utf-8";  ".htm"=  "text/html; charset=utf-8"
     ".css"=   "text/css; charset=utf-8";   ".js"=   "application/javascript; charset=utf-8"
@@ -74,13 +75,20 @@ $mimeTypes = @{
 }
 #endregion
 
-#region ── Helper Functions ──────────────────────────────────
+#region Helper Functions 
 
 function ConvertTo-HtmlEncoded([string]$s) {
     $s -replace '&','&amp;' -replace '<','&lt;' -replace '>','&gt;' -replace '"','&quot;'
 }
 
+
+
 function Get-MimeType([string]$ext) {
+  <#
+    .SYNOPSIS
+    Returns a greeting for the specified name.
+    #>
+
     $ext = $ext.ToLower()
     if ($script:mimeTypes.ContainsKey($ext)) { return $script:mimeTypes[$ext] }
     return "application/octet-stream"
@@ -704,7 +712,7 @@ a:hover{border-color:#666}
 
 #endregion
 
-#region ── Main ──────────────────────────────────────────────
+#region Main 
 
 $uploadStatus  = if ($AllowUpload)   { "Enabled"  } else { "Disabled" }
 $uploadColor   = if ($AllowUpload)   { "Green"    } else { "DarkGray" }
@@ -745,7 +753,7 @@ try {
         $request  = $context.Request
         $response = $context.Response
 
-        # ── Auth check ──────────────────────────────────────
+        #region Auth check
         if ($useAuth) {
             $authHdr = $request.Headers["Authorization"]
             $ok = $authHdr -and $authHdr.StartsWith("Basic ") -and ($authHdr.Substring(6) -eq $authExpected)
@@ -764,14 +772,14 @@ try {
         $rawPath = $request.Url.AbsolutePath.TrimStart('/').TrimEnd('/')
         if ($rawPath -eq '') { $rawPath = '.' }
 
-        # ── Logging ─────────────────────────────────────────
+        #region Logging
         if ($LogRequests) {
             $ts = (Get-Date).ToString("HH:mm:ss")
             $ip = $request.RemoteEndPoint.Address
             Write-Host "  [$ts] $ip $method $($request.Url.AbsolutePath)" -ForegroundColor DarkGray
         }
 
-        # ── Path resolution & security ───────────────────────
+        #region Path resolution & security
         $fullPath    = Join-Path $rootPath $rawPath
         $resolvedObj = Resolve-Path -Path $fullPath -ErrorAction SilentlyContinue
         $resolved    = if ($resolvedObj) { $resolvedObj.Path } else { $null }
@@ -781,7 +789,7 @@ try {
             continue
         }
 
-        # ── Upload (POST) ────────────────────────────────────
+        #region Upload File & Folder (POST)
         if ($method -eq "POST" -and $AllowUpload) {
             $uploadName = $request.QueryString["upload"]
             if ($uploadName -and $uploadName -notmatch '[/\\:<>"|?*]') {
@@ -810,7 +818,7 @@ try {
             continue
         }
 
-        # ── Delete (DELETE) ──────────────────────────────────
+        #region Delete File & Folder (DELETE)
         if ($method -eq "DELETE") {
             $deletePath = [System.Web.HttpUtility]::UrlDecode($request.QueryString["delete"])
             if ($deletePath) {
@@ -846,7 +854,7 @@ try {
                 Send-Html $response (Get-ErrorPage 500 "Internal Server Error") 500
             }
 
-        # ── Directory listing ────────────────────────────────
+        #region Directory listing
         } elseif (Test-Path $resolved -PathType Container) {
             $html = Get-DirectoryPage $rawPath $resolved
             Send-Html $response $html
