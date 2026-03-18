@@ -8,14 +8,14 @@
             "name": "PowerShell: Run as Admin",
             "type": "PowerShell",
             "request": "launch",
-            "script": "Start-Process pwsh -ArgumentList '-ExecutionPolicy ByPass -File \"${workspaceFolder}/psfserver.ps1\"' -Verb RunAs",
+            "script": "Start-Process powershell -ArgumentList '-NoProfile -NonInteractive -ExecutionPolicy ByPass -File \"${workspaceFolder}/psfserver.ps1\"' -Verb RunAs",
             "cwd": "${workspaceFolder}"
         },
         {
             "name": "PowerShell: All Flags Enabled",
             "type": "PowerShell",
             "request": "launch",
-            "script": "Start-Process pwsh -ArgumentList '-ExecutionPolicy ByPass -File \"${workspaceFolder}/psfserver.ps1\" -Path \"F:\\\\\" -AllowUpload -ShowHidden -LogRequests -OpenBrowser -Auth \"krish:1234\"' -Verb RunAs",
+            "script": "Start-Process powershell -ArgumentList '-NoProfile -NonInteractive -ExecutionPolicy ByPass -File \"${workspaceFolder}\\psfserver.ps1\" -Path F:\\ -AllowUpload -ShowHidden -LogRequests -OpenBrowser -Auth krish:1234' -Verb RunAs",
             "cwd": "${workspaceFolder}"
         }
     ]

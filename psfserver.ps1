@@ -2,83 +2,106 @@
 #  PSFserver — PowerShell HTTP File Server
 #  Save this file as UTF-8 (with or without BOM) to preserve
 #  any emoji/Unicode characters in the output.
+#  
+#  Author :- Krishna Noutiyal
 # ============================================================
 
 param(
-    [string]$Path         = (Get-Location).Path,
-    [int]$Port            = 8080,
-    [string]$Title        = "PSFserver",
-    [switch]$AllowUpload,
-    [switch]$ShowHidden,
-    [switch]$LogRequests,
-    [switch]$OpenBrowser,
-    [string]$Auth         = "",
-    [int]$MaxUploadMB     = 100
+  [string]$Path = (Get-Location).Path,
+  [int]$Port = 8080,
+  [string]$Title = "PSFserver",
+  [switch]$AllowUpload,
+  [switch]$ShowHidden,
+  [switch]$LogRequests,
+  [switch]$OpenBrowser,
+  [string]$Auth = "",
+  [int]$MaxUploadMB = 100
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+# Load System.Web for HttpUtility.UrlDecode (required in PS5)
+Add-Type -AssemblyName System.Web
 
 
 #region Startup Checks 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Host "  ERROR  Requires administrator privileges. Run as Administrator." -ForegroundColor Red
-    exit 1
+
+  Write-Host "Requires Admin Privilages !!" -ForegroundColor Red
+  Write-Host "Please Allow permissions for running PSFserver" -ForegroundColor Green -
+  # Re-launch the script elevated, passing all original arguments through
+  $argList = '-ExecutionPolicy ByPass -File "{0}"' -f $MyInvocation.MyCommand.Path
+  foreach ($key in $PSBoundParameters.Keys) {
+    $val = $PSBoundParameters[$key]
+    if ($val -is [switch]) {
+      if ($val.IsPresent) { $argList += " -$key" }
+    }
+    else {
+      $argList += ' -{0} "{1}"' -f $key, $val
+    }
+  }
+  Start-Process powershell -ArgumentList $argList -Verb RunAs
+  
+  Write-Host "`nStarted PSFserver in new windows with Admin Privilages !!" -ForegroundColor Cyan
+  
+  exit
 }
 if (-not (Test-Path -Path $Path -PathType Container)) {
-    Write-Host "  ERROR  Path not found: $Path" -ForegroundColor Red
-    exit 1
+  Write-Host "  ERROR  Path not found: $Path" -ForegroundColor Red
+  exit 1
 }
 $rootPath = (Resolve-Path -Path $Path).Path
 #endregion
 
 #region Auth Setup 
-$useAuth      = $false
+$useAuth = $false
 $authExpected = ""
 if ($Auth -ne "") {
-    $parts = $Auth -split ":", 2
-    if ($parts.Count -eq 2) {
-        $useAuth      = $true
-        $authExpected = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($Auth))
-    } else {
-        Write-Host "  WARN   Auth must be 'user:password'. Auth disabled." -ForegroundColor Yellow
-    }
+  $parts = $Auth -split ":", 2
+  if ($parts.Count -eq 2) {
+    $useAuth = $true
+    $authExpected = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($Auth))
+  }
+  else {
+    Write-Host "  WARN   Auth must be 'user:password'. Auth disabled." -ForegroundColor Yellow
+  }
 }
 #endregion
 
 #region MIME Types 
 $mimeTypes = @{
-    ".html"=  "text/html; charset=utf-8";  ".htm"=  "text/html; charset=utf-8"
-    ".css"=   "text/css; charset=utf-8";   ".js"=   "application/javascript; charset=utf-8"
-    ".json"=  "application/json";          ".xml"=  "application/xml"
-    ".txt"=   "text/plain; charset=utf-8"; ".md"=   "text/plain; charset=utf-8"
-    ".csv"=   "text/csv; charset=utf-8";   ".log"=  "text/plain; charset=utf-8"
-    ".png"=   "image/png";                 ".jpg"=  "image/jpeg"; ".jpeg"= "image/jpeg"
-    ".gif"=   "image/gif";                 ".svg"=  "image/svg+xml"; ".webp"= "image/webp"
-    ".ico"=   "image/x-icon";             ".bmp"=  "image/bmp"
-    ".mp4"=   "video/mp4";                ".webm"= "video/webm"; ".avi"= "video/x-msvideo"
-    ".mp3"=   "audio/mpeg";               ".wav"=  "audio/wav"; ".ogg"= "audio/ogg"; ".flac"= "audio/flac"
-    ".pdf"=   "application/pdf"
-    ".zip"=   "application/zip";          ".gz"=   "application/gzip"; ".tar"= "application/x-tar"
-    ".7z"=    "application/x-7z-compressed"; ".rar"= "application/x-rar-compressed"
-    ".woff"=  "font/woff";                ".woff2"= "font/woff2"; ".ttf"= "font/ttf"
-    ".ps1"=   "text/plain; charset=utf-8"; ".py"=  "text/plain; charset=utf-8"
-    ".sh"=    "text/plain; charset=utf-8"; ".bat"= "text/plain; charset=utf-8"
-    ".go"=    "text/plain; charset=utf-8"; ".rs"=  "text/plain; charset=utf-8"
-    ".ts"=    "text/plain; charset=utf-8"; ".jsx"= "text/plain; charset=utf-8"
-    ".java"=  "text/plain; charset=utf-8"; ".c"=   "text/plain; charset=utf-8"
-    ".cpp"=   "text/plain; charset=utf-8"; ".cs"=  "text/plain; charset=utf-8"
-    ".rb"=    "text/plain; charset=utf-8"; ".php"= "text/plain; charset=utf-8"
-    ".sql"=   "text/plain; charset=utf-8"; ".yaml"="text/plain; charset=utf-8"
-    ".yml"=   "text/plain; charset=utf-8"; ".toml"="text/plain; charset=utf-8"
-    ".ini"=   "text/plain; charset=utf-8"; ".conf"="text/plain; charset=utf-8"
+  ".html" = "text/html; charset=utf-8"; ".htm" = "text/html; charset=utf-8"
+  ".css" = "text/css; charset=utf-8"; ".js" = "application/javascript; charset=utf-8"
+  ".json" = "application/json"; ".xml" = "application/xml"
+  ".txt" = "text/plain; charset=utf-8"; ".md" = "text/plain; charset=utf-8"
+  ".csv" = "text/csv; charset=utf-8"; ".log" = "text/plain; charset=utf-8"
+  ".png" = "image/png"; ".jpg" = "image/jpeg"; ".jpeg" = "image/jpeg"
+  ".gif" = "image/gif"; ".svg" = "image/svg+xml"; ".webp" = "image/webp"
+  ".ico" = "image/x-icon"; ".bmp" = "image/bmp"
+  ".mp4" = "video/mp4"; ".webm" = "video/webm"; ".avi" = "video/x-msvideo"
+  ".mp3" = "audio/mpeg"; ".wav" = "audio/wav"; ".ogg" = "audio/ogg"; ".flac" = "audio/flac"
+  ".pdf" = "application/pdf"
+  ".zip" = "application/zip"; ".gz" = "application/gzip"; ".tar" = "application/x-tar"
+  ".7z" = "application/x-7z-compressed"; ".rar" = "application/x-rar-compressed"
+  ".woff" = "font/woff"; ".woff2" = "font/woff2"; ".ttf" = "font/ttf"
+  ".ps1" = "text/plain; charset=utf-8"; ".py" = "text/plain; charset=utf-8"
+  ".sh" = "text/plain; charset=utf-8"; ".bat" = "text/plain; charset=utf-8"
+  ".go" = "text/plain; charset=utf-8"; ".rs" = "text/plain; charset=utf-8"
+  ".ts" = "text/plain; charset=utf-8"; ".jsx" = "text/plain; charset=utf-8"
+  ".java" = "text/plain; charset=utf-8"; ".c" = "text/plain; charset=utf-8"
+  ".cpp" = "text/plain; charset=utf-8"; ".cs" = "text/plain; charset=utf-8"
+  ".rb" = "text/plain; charset=utf-8"; ".php" = "text/plain; charset=utf-8"
+  ".sql" = "text/plain; charset=utf-8"; ".yaml" = "text/plain; charset=utf-8"
+  ".yml" = "text/plain; charset=utf-8"; ".toml" = "text/plain; charset=utf-8"
+  ".ini" = "text/plain; charset=utf-8"; ".conf" = "text/plain; charset=utf-8"
 }
 #endregion
 
 #region Helper Functions 
 
 function ConvertTo-HtmlEncoded([string]$s) {
-    $s -replace '&','&amp;' -replace '<','&lt;' -replace '>','&gt;' -replace '"','&quot;'
+  $s -replace '&', '&amp;' -replace '<', '&lt;' -replace '>', '&gt;' -replace '"', '&quot;'
 }
 
 
@@ -89,139 +112,139 @@ function Get-MimeType([string]$ext) {
     Returns a greeting for the specified name.
     #>
 
-    $ext = $ext.ToLower()
-    if ($script:mimeTypes.ContainsKey($ext)) { return $script:mimeTypes[$ext] }
-    return "application/octet-stream"
+  $ext = $ext.ToLower()
+  if ($script:mimeTypes.ContainsKey($ext)) { return $script:mimeTypes[$ext] }
+  return "application/octet-stream"
 }
 
 function Format-FileSize([long]$bytes) {
-    if ($bytes -lt 1KB)  { return "$bytes B" }
-    if ($bytes -lt 1MB)  { return "{0:N1} KB" -f ($bytes / 1KB) }
-    if ($bytes -lt 1GB)  { return "{0:N1} MB" -f ($bytes / 1MB) }
-    return "{0:N2} GB" -f ($bytes / 1GB)
+  if ($bytes -lt 1KB) { return "$bytes B" }
+  if ($bytes -lt 1MB) { return "{0:N1} KB" -f ($bytes / 1KB) }
+  if ($bytes -lt 1GB) { return "{0:N1} MB" -f ($bytes / 1MB) }
+  return "{0:N2} GB" -f ($bytes / 1GB)
 }
 
 function Get-FileIcon($item) {
-    if ($item.PSIsContainer) { return "&#128194;" } # 📂
-    switch ($item.Extension.ToLower()) {
-        { $_ -in @(".png",".jpg",".jpeg",".gif",".svg",".webp",".bmp",".ico") } { return "&#128247;" } # 🖼
-        { $_ -in @(".mp4",".avi",".mov",".mkv",".webm",".flv") }               { return "&#127909;" } # 🎬
-        { $_ -in @(".mp3",".wav",".ogg",".flac",".aac",".m4a") }               { return "&#127925;" } # 🎵
-        { $_ -in @(".zip",".gz",".tar",".7z",".rar",".bz2") }                  { return "&#128230;" } # 📦
-        { $_ -in @(".pdf") }                                                     { return "&#128213;" } # 📕
-        { $_ -in @(".doc",".docx") }                                            { return "&#128196;" } # 📄
-        { $_ -in @(".xls",".xlsx",".csv") }                                     { return "&#128202;" } # 📊
-        { $_ -in @(".ppt",".pptx") }                                            { return "&#128202;" }
-        { $_ -in @(".html",".htm",".css") }                                     { return "&#127758;" } # 🌐
-        { $_ -in @(".js",".ts",".jsx",".vue") }                                 { return "&#9889;"   } # ⚡
-        { $_ -in @(".py",".rb",".go",".rs",".java",".c",".cpp",".cs",".php") } { return "&#9881;"   } # ⚙
-        { $_ -in @(".ps1",".sh",".bat",".cmd") }                               { return "&#128187;"  } # 💻
-        { $_ -in @(".json",".xml",".yaml",".yml",".toml",".ini",".conf") }     { return "&#128295;"  } # 🔧
-        { $_ -in @(".exe",".dll",".msi") }                                      { return "&#9881;"   }
-        default                                                                  { return "&#128196;" } # 📄
-    }
+  if ($item.PSIsContainer) { return "&#128194;" } # 📂
+  switch ($item.Extension.ToLower()) {
+    { $_ -in @(".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".bmp", ".ico") } { return "&#128247;" } # 🖼
+    { $_ -in @(".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv") } { return "&#127909;" } # 🎬
+    { $_ -in @(".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a") } { return "&#127925;" } # 🎵
+    { $_ -in @(".zip", ".gz", ".tar", ".7z", ".rar", ".bz2") } { return "&#128230;" } # 📦
+    { $_ -in @(".pdf") } { return "&#128213;" } # 📕
+    { $_ -in @(".doc", ".docx") } { return "&#128196;" } # 📄
+    { $_ -in @(".xls", ".xlsx", ".csv") } { return "&#128202;" } # 📊
+    { $_ -in @(".ppt", ".pptx") } { return "&#128202;" }
+    { $_ -in @(".html", ".htm", ".css") } { return "&#127758;" } # 🌐
+    { $_ -in @(".js", ".ts", ".jsx", ".vue") } { return "&#9889;" } # ⚡
+    { $_ -in @(".py", ".rb", ".go", ".rs", ".java", ".c", ".cpp", ".cs", ".php") } { return "&#9881;" } # ⚙
+    { $_ -in @(".ps1", ".sh", ".bat", ".cmd") } { return "&#128187;" } # 💻
+    { $_ -in @(".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".conf") } { return "&#128295;" } # 🔧
+    { $_ -in @(".exe", ".dll", ".msi") } { return "&#9881;" }
+    default { return "&#128196;" } # 📄
+  }
 }
 
 function Send-Response($response, [int]$status, [string]$contentType, [byte[]]$body) {
-    $response.StatusCode      = $status
-    $response.ContentType     = $contentType
-    $response.ContentLength64 = $body.Length
-    $response.OutputStream.Write($body, 0, $body.Length)
-    $response.OutputStream.Close()
+  $response.StatusCode = $status
+  $response.ContentType = $contentType
+  $response.ContentLength64 = $body.Length
+  $response.OutputStream.Write($body, 0, $body.Length)
+  $response.OutputStream.Close()
 }
 
 function Send-Html($response, [string]$html, [int]$status = 200) {
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($html)
-    Send-Response $response $status "text/html; charset=utf-8" $bytes
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($html)
+  Send-Response $response $status "text/html; charset=utf-8" $bytes
 }
 
 function Get-BreadcrumbHtml([string]$reqPath) {
-    $html = "<a href='/'>~</a>"
-    if ($reqPath -eq '' -or $reqPath -eq '.') { return $html }
-    $parts = $reqPath.TrimStart('/').TrimEnd('/') -split '/'
-    $acc = ""
-    foreach ($part in $parts) {
-        if ($part -eq '') { continue }
-        $acc += "/$part"
-        $enc  = ConvertTo-HtmlEncoded $part
-        $html += "<span class='sep'> / </span><a href='${acc}/'>$enc</a>"
-    }
-    return $html
+  $html = "<a href='/'>~</a>"
+  if ($reqPath -eq '' -or $reqPath -eq '.') { return $html }
+  $parts = $reqPath.TrimStart('/').TrimEnd('/') -split '/'
+  $acc = ""
+  foreach ($part in $parts) {
+    if ($part -eq '') { continue }
+    $acc += "/$part"
+    $enc = ConvertTo-HtmlEncoded $part
+    $html += "<span class='sep'> / </span><a href='${acc}/'>$enc</a>"
+  }
+  return $html
 }
 
 function Get-DirectoryPage([string]$reqPath, [string]$fullPath) {
-    $gcArgs = @{ Path = $fullPath; ErrorAction = 'SilentlyContinue' }
-    if ($script:ShowHidden) { $gcArgs['Force'] = $true }
-    $allItems    = Get-ChildItem @gcArgs
-    $folders     = @($allItems | Where-Object { $_.PSIsContainer } | Sort-Object Name)
-    $files       = @($allItems | Where-Object { -not $_.PSIsContainer } | Sort-Object Name)
-    $folderCount = $folders.Count
-    $fileCount   = $files.Count
-    $totalBytes  = ($files | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-    if ($null -eq $totalBytes) { $totalBytes = 0 }
-    $totalSize   = Format-FileSize $totalBytes
-    $breadcrumb  = Get-BreadcrumbHtml $reqPath
-    $displayPath = if ($reqPath -eq '' -or $reqPath -eq '.') { "/" } else { "/$reqPath/" }
+  $gcArgs = @{ Path = $fullPath; ErrorAction = 'SilentlyContinue' }
+  if ($script:ShowHidden) { $gcArgs['Force'] = $true }
+  $allItems = Get-ChildItem @gcArgs
+  $folders = @($allItems | Where-Object { $_.PSIsContainer } | Sort-Object Name)
+  $files = @($allItems | Where-Object { -not $_.PSIsContainer } | Sort-Object Name)
+  $folderCount = $folders.Count
+  $fileCount = $files.Count
+  $totalBytes = ($files | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+  if ($null -eq $totalBytes) { $totalBytes = 0 }
+  $totalSize = Format-FileSize $totalBytes
+  $breadcrumb = Get-BreadcrumbHtml $reqPath
+  $displayPath = if ($reqPath -eq '' -or $reqPath -eq '.') { "/" } else { "/$reqPath/" }
 
-    $sb = [System.Text.StringBuilder]::new()
+  $sb = New-Object System.Text.StringBuilder
 
-    # Parent directory link
-    if ($reqPath -ne '' -and $reqPath -ne '.') {
-        $parent     = Split-Path ($reqPath.TrimEnd('/')) -Parent
-        $parentHref = if ($parent -and $parent -ne '.') { "/$parent/" } else { "/" }
-        $null = $sb.Append("<a class=`"file-item`" href=`"$parentHref`" data-name=`"..`" data-type=`"folder`" data-size=`"0`" data-date=`"0`">")
-        $null = $sb.Append("<span class=`"file-icon`">&#8592;</span>")
-        $null = $sb.Append("<span class=`"file-name folder-name`">..</span>")
-        $null = $sb.Append("<span class=`"file-date`">&#8212;</span>")
-        $null = $sb.Append("<span class=`"file-size`">&#8212;</span>")
-        $null = $sb.Append("<span></span></a>")
-    }
+  # Parent directory link
+  if ($reqPath -ne '' -and $reqPath -ne '.') {
+    $parent = Split-Path ($reqPath.TrimEnd('/')) -Parent
+    $parentHref = if ($parent -and $parent -ne '.') { "/$parent/" } else { "/" }
+    $null = $sb.Append("<a class=`"file-item`" href=`"$parentHref`" data-name=`"..`" data-type=`"folder`" data-size=`"0`" data-date=`"0`">")
+    $null = $sb.Append("<span class=`"file-icon`">&#8592;</span>")
+    $null = $sb.Append("<span class=`"file-name folder-name`">..</span>")
+    $null = $sb.Append("<span class=`"file-date`">&#8212;</span>")
+    $null = $sb.Append("<span class=`"file-size`">&#8212;</span>")
+    $null = $sb.Append("<span></span></a>")
+  }
 
-    foreach ($f in $folders) {
-        $name    = $f.Name
-        $enc     = ConvertTo-HtmlEncoded $name
-        $href    = if ($reqPath -eq '' -or $reqPath -eq '.') { "/$name/" } else { "/$reqPath/$name/" }
-        $icon    = Get-FileIcon $f
-        $dateSrt = $f.LastWriteTime.ToString("yyyy-MM-dd")
-        $dateFmt = $f.LastWriteTime.ToString("MMM dd, yyyy")
-        $null = $sb.Append("<a class=`"file-item`" href=`"$href`" data-name=`"$($name.ToLower())`" data-type=`"folder`" data-size=`"0`" data-date=`"$dateSrt`">")
-        $null = $sb.Append("<span class=`"file-icon`">$icon</span>")
-        $null = $sb.Append("<span class=`"file-name folder-name`">$enc</span>")
-        $null = $sb.Append("<span class=`"file-date`">$dateFmt</span>")
-        $null = $sb.Append("<span class=`"file-size`">&#8212;</span>")
-        $null = $sb.Append("<button class=`"del-btn`" title=`"Delete $enc`" onclick=`"confirmDelete(event,'$href','$enc',true)`">&#10005;</button></a>")
-    }
+  foreach ($f in $folders) {
+    $name = $f.Name
+    $enc = ConvertTo-HtmlEncoded $name
+    $href = if ($reqPath -eq '' -or $reqPath -eq '.') { "/$name/" } else { "/$reqPath/$name/" }
+    $icon = Get-FileIcon $f
+    $dateSrt = $f.LastWriteTime.ToString("yyyy-MM-dd")
+    $dateFmt = $f.LastWriteTime.ToString("MMM dd, yyyy")
+    $null = $sb.Append("<a class=`"file-item`" href=`"$href`" data-name=`"$($name.ToLower())`" data-type=`"folder`" data-size=`"0`" data-date=`"$dateSrt`">")
+    $null = $sb.Append("<span class=`"file-icon`">$icon</span>")
+    $null = $sb.Append("<span class=`"file-name folder-name`">$enc</span>")
+    $null = $sb.Append("<span class=`"file-date`">$dateFmt</span>")
+    $null = $sb.Append("<span class=`"file-size`">&#8212;</span>")
+    $null = $sb.Append("<button class=`"del-btn`" title=`"Delete $enc`" onclick=`"confirmDelete(event,'$href','$enc',true)`">&#10005;</button></a>")
+  }
 
-    foreach ($f in $files) {
-        $name    = $f.Name
-        $enc     = ConvertTo-HtmlEncoded $name
-        $href    = if ($reqPath -eq '' -or $reqPath -eq '.') { "/$name" } else { "/$reqPath/$name" }
-        $icon    = Get-FileIcon $f
-        $dateSrt = $f.LastWriteTime.ToString("yyyy-MM-dd")
-        $dateFmt = $f.LastWriteTime.ToString("MMM dd, yyyy")
-        $sizeStr = Format-FileSize $f.Length
-        $extEnc  = ConvertTo-HtmlEncoded $f.Extension
-        $baseEnc = ConvertTo-HtmlEncoded $f.BaseName
-        $extHtml = if ($f.Extension) { "<span class=`"ext`">$extEnc</span>" } else { "" }
-        $null = $sb.Append("<a class=`"file-item`" href=`"$href`" data-name=`"$($name.ToLower())`" data-type=`"file`" data-size=`"$($f.Length)`" data-date=`"$dateSrt`">")
-        $null = $sb.Append("<span class=`"file-icon`">$icon</span>")
-        $null = $sb.Append("<span class=`"file-name`">$baseEnc$extHtml</span>")
-        $null = $sb.Append("<span class=`"file-date`">$dateFmt</span>")
-        $null = $sb.Append("<span class=`"file-size`">$sizeStr</span>")
-        $null = $sb.Append("<button class=`"del-btn`" title=`"Delete $enc`" onclick=`"confirmDelete(event,'$href','$enc',false)`">&#10005;</button></a>")
-    }
+  foreach ($f in $files) {
+    $name = $f.Name
+    $enc = ConvertTo-HtmlEncoded $name
+    $href = if ($reqPath -eq '' -or $reqPath -eq '.') { "/$name" } else { "/$reqPath/$name" }
+    $icon = Get-FileIcon $f
+    $dateSrt = $f.LastWriteTime.ToString("yyyy-MM-dd")
+    $dateFmt = $f.LastWriteTime.ToString("MMM dd, yyyy")
+    $sizeStr = Format-FileSize $f.Length
+    $extEnc = ConvertTo-HtmlEncoded $f.Extension
+    $baseEnc = ConvertTo-HtmlEncoded $f.BaseName
+    $extHtml = if ($f.Extension) { "<span class=`"ext`">$extEnc</span>" } else { "" }
+    $null = $sb.Append("<a class=`"file-item`" href=`"$href`" data-name=`"$($name.ToLower())`" data-type=`"file`" data-size=`"$($f.Length)`" data-date=`"$dateSrt`">")
+    $null = $sb.Append("<span class=`"file-icon`">$icon</span>")
+    $null = $sb.Append("<span class=`"file-name`">$baseEnc$extHtml</span>")
+    $null = $sb.Append("<span class=`"file-date`">$dateFmt</span>")
+    $null = $sb.Append("<span class=`"file-size`">$sizeStr</span>")
+    $null = $sb.Append("<button class=`"del-btn`" title=`"Delete $enc`" onclick=`"confirmDelete(event,'$href','$enc',false)`">&#10005;</button></a>")
+  }
 
-    if ($sb.Length -eq 0) {
-        $null = $sb.Append('<div class="empty"><div class="empty-ico">&#127756;</div><h3>EMPTY DIRECTORY</h3></div>')
-    }
+  if ($sb.Length -eq 0) {
+    $null = $sb.Append('<div class="empty"><div class="empty-ico">&#127756;</div><h3>EMPTY DIRECTORY</h3></div>')
+  }
 
-    # Upload parts
-    $uploadButton = ""
-    $uploadZone   = ""
-    $uploadJs     = ""
-    if ($script:AllowUpload) {
-        $uploadButton = '<button class="btn btn-primary" onclick="document.getElementById(''fileInput'').click()">Upload</button>'
-        $uploadZone = @'
+  # Upload parts
+  $uploadButton = ""
+  $uploadZone = ""
+  $uploadJs = ""
+  if ($script:AllowUpload) {
+    $uploadButton = '<button class="btn btn-primary" onclick="document.getElementById(''fileInput'').click()">Upload</button>'
+    $uploadZone = @'
 <input type="file" id="fileInput" style="display:none" multiple onchange="uploadFiles(this.files)">
 <div id="dropOverlay" class="drop-overlay" style="display:none">
   <div class="drop-message">Drop to upload</div>
@@ -231,7 +254,7 @@ function Get-DirectoryPage([string]$reqPath, [string]$fullPath) {
   <span id="uploadToastLabel">Uploading&hellip;</span>
 </div>
 '@
-        $uploadJs = @'
+    $uploadJs = @'
 var dragCounter=0;
 document.addEventListener('dragenter',function(e){
   if(!e.dataTransfer||!e.dataTransfer.types||!Array.prototype.includes.call(e.dataTransfer.types,'Files'))return;
@@ -269,31 +292,31 @@ async function uploadFiles(files){
   setTimeout(function(){toast.style.display='none';if(!failed.length)location.reload();},failed.length?4000:900);
 }
 '@
-    }
+  }
 
-    $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-    $portStr   = $script:Port.ToString()
+  $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+  $portStr = $script:Port.ToString()
 
-    $page = Get-HtmlTemplate
-    $page = $page.Replace('__SERVER_TITLE__',  (ConvertTo-HtmlEncoded $script:Title))
-    $page = $page.Replace('__PORT__',           $portStr)
-    $page = $page.Replace('__DISPLAY_PATH__',  (ConvertTo-HtmlEncoded $displayPath))
-    $page = $page.Replace('__BREADCRUMB__',     $breadcrumb)
-    $page = $page.Replace('__FOLDER_COUNT__',   $folderCount.ToString())
-    $page = $page.Replace('__FILE_COUNT__',     $fileCount.ToString())
-    $page = $page.Replace('__TOTAL_SIZE__',     $totalSize)
-    $page = $page.Replace('__UPLOAD_BUTTON__',  $uploadButton)
-    $page = $page.Replace('__FILE_ITEMS__',     $sb.ToString())
-    $page = $page.Replace('__UPLOAD_ZONE__',    $uploadZone)
-    $page = $page.Replace('__UPLOAD_JS__',      $uploadJs)
-    $page = $page.Replace('__TIMESTAMP__',      $timestamp)
-    return $page
+  $page = Get-HtmlTemplate
+  $page = $page.Replace('__SERVER_TITLE__', (ConvertTo-HtmlEncoded $script:Title))
+  $page = $page.Replace('__PORT__', $portStr)
+  $page = $page.Replace('__DISPLAY_PATH__', (ConvertTo-HtmlEncoded $displayPath))
+  $page = $page.Replace('__BREADCRUMB__', $breadcrumb)
+  $page = $page.Replace('__FOLDER_COUNT__', $folderCount.ToString())
+  $page = $page.Replace('__FILE_COUNT__', $fileCount.ToString())
+  $page = $page.Replace('__TOTAL_SIZE__', $totalSize)
+  $page = $page.Replace('__UPLOAD_BUTTON__', $uploadButton)
+  $page = $page.Replace('__FILE_ITEMS__', $sb.ToString())
+  $page = $page.Replace('__UPLOAD_ZONE__', $uploadZone)
+  $page = $page.Replace('__UPLOAD_JS__', $uploadJs)
+  $page = $page.Replace('__TIMESTAMP__', $timestamp)
+  return $page
 }
 
 # ── HTML Templates ────────────────────────────────────────────────────────────
 
 function Get-HtmlTemplate {
-return @'
+  return @'
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -675,7 +698,7 @@ __UPLOAD_JS__
 }
 
 function Get-ErrorPage([int]$code, [string]$message) {
-    $tmpl = @'
+  $tmpl = @'
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -707,24 +730,24 @@ a:hover{border-color:#666}
 </body>
 </html>
 '@
-    $tmpl.Replace('__CODE__', $code.ToString()).Replace('__MESSAGE__', (ConvertTo-HtmlEncoded $message))
+  $tmpl.Replace('__CODE__', $code.ToString()).Replace('__MESSAGE__', (ConvertTo-HtmlEncoded $message))
 }
 
 #endregion
 
 #region Main 
 
-$uploadStatus  = if ($AllowUpload)   { "Enabled"  } else { "Disabled" }
-$uploadColor   = if ($AllowUpload)   { "Green"    } else { "DarkGray" }
-$hiddenStatus  = if ($ShowHidden)    { "Enabled"  } else { "Disabled" }
-$hiddenColor   = if ($ShowHidden)    { "Green"    } else { "DarkGray" }
-$authStatus    = if ($useAuth)       { "Enabled"  } else { "Disabled" }
-$authColor     = if ($useAuth)       { "Green"    } else { "DarkGray" }
-$logStatus     = if ($LogRequests)   { "Enabled"  } else { "Disabled" }
-$logColor      = if ($LogRequests)   { "Green"    } else { "DarkGray" }
+$uploadStatus = if ($AllowUpload) { "Enabled" } else { "Disabled" }
+$uploadColor = if ($AllowUpload) { "Green" } else { "DarkGray" }
+$hiddenStatus = if ($ShowHidden) { "Enabled" } else { "Disabled" }
+$hiddenColor = if ($ShowHidden) { "Green" } else { "DarkGray" }
+$authStatus = if ($useAuth) { "Enabled" } else { "Disabled" }
+$authColor = if ($useAuth) { "Green" } else { "DarkGray" }
+$logStatus = if ($LogRequests) { "Enabled" } else { "Disabled" }
+$logColor = if ($LogRequests) { "Green" } else { "DarkGray" }
 
 Write-Host ""
-Write-Host "  ⚡  $Title" -ForegroundColor Cyan
+Write-Host "  [*] $Title" -ForegroundColor Cyan
 Write-Host "  ─────────────────────────────────────────" -ForegroundColor DarkGray
 Write-Host "  URL        : " -NoNewline -ForegroundColor DarkGray; Write-Host "http://localhost:$Port/" -ForegroundColor White
 Write-Host "  Root Path  : " -NoNewline -ForegroundColor DarkGray; Write-Host $rootPath -ForegroundColor White
@@ -738,139 +761,151 @@ Write-Host "  Press Ctrl+C to stop" -ForegroundColor DarkGray
 Write-Host ""
 
 if ($OpenBrowser) {
-    Start-Process "http://localhost:$Port/"
+  Start-Process "http://localhost:$Port/"
 }
 
-$listener = [System.Net.HttpListener]::new()
+$listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://*:$Port/")
 
 try {
-    $listener.Start()
-    Write-Host "  Server running." -ForegroundColor Green
+  $listener.Start()
+  Write-Host "  Server running." -ForegroundColor Green
 
-    while ($listener.IsListening) {
-        $context  = $listener.GetContext()
-        $request  = $context.Request
-        $response = $context.Response
+  while ($listener.IsListening) {
+    $context = $listener.GetContext()
+    $request = $context.Request
+    $response = $context.Response
 
-        #region Auth check
-        if ($useAuth) {
-            $authHdr = $request.Headers["Authorization"]
-            $ok = $authHdr -and $authHdr.StartsWith("Basic ") -and ($authHdr.Substring(6) -eq $authExpected)
-            if (-not $ok) {
-                $response.StatusCode = 401
-                $response.Headers.Add("WWW-Authenticate", "Basic realm=`"$Title`"")
-                $b = [System.Text.Encoding]::UTF8.GetBytes("401 Unauthorized")
-                $response.ContentLength64 = $b.Length
-                $response.OutputStream.Write($b, 0, $b.Length)
-                $response.OutputStream.Close()
-                continue
-            }
-        }
-
-        $method  = $request.HttpMethod
-        $rawPath = $request.Url.AbsolutePath.TrimStart('/').TrimEnd('/')
-        if ($rawPath -eq '') { $rawPath = '.' }
-
-        #region Logging
-        if ($LogRequests) {
-            $ts = (Get-Date).ToString("HH:mm:ss")
-            $ip = $request.RemoteEndPoint.Address
-            Write-Host "  [$ts] $ip $method $($request.Url.AbsolutePath)" -ForegroundColor DarkGray
-        }
-
-        #region Path resolution & security
-        $fullPath    = Join-Path $rootPath $rawPath
-        $resolvedObj = Resolve-Path -Path $fullPath -ErrorAction SilentlyContinue
-        $resolved    = if ($resolvedObj) { $resolvedObj.Path } else { $null }
-
-        if (-not $resolved -or -not $resolved.StartsWith($rootPath)) {
-            Send-Html $response (Get-ErrorPage 403 "Access Denied") 403
-            continue
-        }
-
-        #region Upload File & Folder (POST)
-        if ($method -eq "POST" -and $AllowUpload) {
-            $uploadName = $request.QueryString["upload"]
-            if ($uploadName -and $uploadName -notmatch '[/\\:<>"|?*]') {
-                $targetDir  = if (Test-Path $resolved -PathType Container) { $resolved } else { Split-Path $resolved }
-                $targetFile = Join-Path $targetDir $uploadName
-                try {
-                    $maxBytes = [long]$MaxUploadMB * 1MB
-                    if ($request.ContentLength64 -gt $maxBytes) {
-                        $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":false,"error":"File exceeds size limit"}')
-                        Send-Response $response 413 "application/json" $b
-                    } else {
-                        $fs = [System.IO.File]::Create($targetFile)
-                        $request.InputStream.CopyTo($fs)
-                        $fs.Close()
-                        $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true}')
-                        Send-Response $response 200 "application/json" $b
-                        if ($LogRequests) { Write-Host "  [UPLOAD] $uploadName -> $targetDir" -ForegroundColor Green }
-                    }
-                } catch {
-                    $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":false,"error":"Upload failed"}')
-                    Send-Response $response 500 "application/json" $b
-                }
-            } else {
-                Send-Html $response (Get-ErrorPage 400 "Bad Request") 400
-            }
-            continue
-        }
-
-        #region Delete File & Folder (DELETE)
-        if ($method -eq "DELETE") {
-            $deletePath = [System.Web.HttpUtility]::UrlDecode($request.QueryString["delete"])
-            if ($deletePath) {
-                $delTarget   = Join-Path $rootPath $deletePath.TrimStart('/')
-                $delResolved = (Resolve-Path $delTarget -ErrorAction SilentlyContinue)?.Path
-                if ($delResolved -and $delResolved.StartsWith($rootPath) -and $delResolved -ne $rootPath) {
-                    try {
-                        Remove-Item -Path $delResolved -Recurse -Force
-                        $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true}')
-                        Send-Response $response 200 "application/json" $b
-                        if ($LogRequests) { Write-Host "  [DELETE] $delResolved" -ForegroundColor DarkRed }
-                    } catch {
-                        $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":false}')
-                        Send-Response $response 500 "application/json" $b
-                    }
-                } else {
-                    $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":false,"error":"Forbidden"}')
-                    Send-Response $response 403 "application/json" $b
-                }
-            } else {
-                $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":false,"error":"Bad request"}')
-                Send-Response $response 400 "application/json" $b
-            }
-            continue
-        }
-        if (Test-Path $resolved -PathType Leaf) {
-            $ext  = [System.IO.Path]::GetExtension($resolved)
-            $mime = Get-MimeType $ext
-            try {
-                $bytes = [System.IO.File]::ReadAllBytes($resolved)
-                Send-Response $response 200 $mime $bytes
-            } catch {
-                Send-Html $response (Get-ErrorPage 500 "Internal Server Error") 500
-            }
-
-        #region Directory listing
-        } elseif (Test-Path $resolved -PathType Container) {
-            $html = Get-DirectoryPage $rawPath $resolved
-            Send-Html $response $html
-
-        } else {
-            Send-Html $response (Get-ErrorPage 404 "Not Found") 404
-        }
+    #region Auth check
+    if ($useAuth) {
+      $authHdr = $request.Headers["Authorization"]
+      $ok = $authHdr -and $authHdr.StartsWith("Basic ") -and ($authHdr.Substring(6) -eq $authExpected)
+      if (-not $ok) {
+        $response.StatusCode = 401
+        $response.Headers.Add("WWW-Authenticate", "Basic realm=`"$Title`"")
+        $b = [System.Text.Encoding]::UTF8.GetBytes("401 Unauthorized")
+        $response.ContentLength64 = $b.Length
+        $response.OutputStream.Write($b, 0, $b.Length)
+        $response.OutputStream.Close()
+        continue
+      }
     }
-} catch {
-    Write-Host "  ERROR: $_" -ForegroundColor Red
-} finally {
-    if ($listener.IsListening) { $listener.Stop() }
-    $listener.Dispose()
-    Write-Host ""
-    Write-Host "  Server stopped." -ForegroundColor Yellow
-    Write-Host ""
+
+    $method = $request.HttpMethod
+    $rawPath = $request.Url.AbsolutePath.TrimStart('/').TrimEnd('/')
+    if ($rawPath -eq '') { $rawPath = '.' }
+
+    #region Logging
+    if ($LogRequests) {
+      $ts = (Get-Date).ToString("HH:mm:ss")
+      $ip = $request.RemoteEndPoint.Address
+      Write-Host "  [$ts] $ip $method $($request.Url.AbsolutePath)" -ForegroundColor DarkGray
+    }
+
+    #region Path resolution & security
+    $fullPath = Join-Path $rootPath $rawPath
+    $resolvedObj = Resolve-Path -Path $fullPath -ErrorAction SilentlyContinue
+    $resolved = if ($resolvedObj) { $resolvedObj.Path } else { $null }
+
+    if (-not $resolved -or -not $resolved.StartsWith($rootPath)) {
+      Send-Html $response (Get-ErrorPage 403 "Access Denied") 403
+      continue
+    }
+
+    #region Upload File & Folder (POST)
+    if ($method -eq "POST" -and $AllowUpload) {
+      $uploadName = $request.QueryString["upload"]
+      if ($uploadName -and $uploadName -notmatch '[/\\:<>"|?*]') {
+        $targetDir = if (Test-Path $resolved -PathType Container) { $resolved } else { Split-Path $resolved }
+        $targetFile = Join-Path $targetDir $uploadName
+        try {
+          $maxBytes = [long]$MaxUploadMB * 1MB
+          if ($request.ContentLength64 -gt $maxBytes) {
+            $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":false,"error":"File exceeds size limit"}')
+            Send-Response $response 413 "application/json" $b
+          }
+          else {
+            $fs = [System.IO.File]::Create($targetFile)
+            $request.InputStream.CopyTo($fs)
+            $fs.Close()
+            $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true}')
+            Send-Response $response 200 "application/json" $b
+            if ($LogRequests) { Write-Host "  [UPLOAD] $uploadName -> $targetDir" -ForegroundColor Green }
+          }
+        }
+        catch {
+          $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":false,"error":"Upload failed"}')
+          Send-Response $response 500 "application/json" $b
+        }
+      }
+      else {
+        Send-Html $response (Get-ErrorPage 400 "Bad Request") 400
+      }
+      continue
+    }
+
+    #region Delete File & Folder (DELETE)
+    if ($method -eq "DELETE") {
+      $deletePath = [System.Web.HttpUtility]::UrlDecode($request.QueryString["delete"])
+      if ($deletePath) {
+        $delTarget = Join-Path $rootPath $deletePath.TrimStart('/')
+        $delResolvedObj = Resolve-Path $delTarget -ErrorAction SilentlyContinue
+        $delResolved = if ($delResolvedObj) { $delResolvedObj.Path } else { $null }
+        if ($delResolved -and $delResolved.StartsWith($rootPath) -and $delResolved -ne $rootPath) {
+          try {
+            Remove-Item -Path $delResolved -Recurse -Force
+            $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true}')
+            Send-Response $response 200 "application/json" $b
+            if ($LogRequests) { Write-Host "  [DELETE] $delResolved" -ForegroundColor DarkRed }
+          }
+          catch {
+            $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":false}')
+            Send-Response $response 500 "application/json" $b
+          }
+        }
+        else {
+          $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":false,"error":"Forbidden"}')
+          Send-Response $response 403 "application/json" $b
+        }
+      }
+      else {
+        $b = [System.Text.Encoding]::UTF8.GetBytes('{"ok":false,"error":"Bad request"}')
+        Send-Response $response 400 "application/json" $b
+      }
+      continue
+    }
+    if (Test-Path $resolved -PathType Leaf) {
+      $ext = [System.IO.Path]::GetExtension($resolved)
+      $mime = Get-MimeType $ext
+      try {
+        $bytes = [System.IO.File]::ReadAllBytes($resolved)
+        Send-Response $response 200 $mime $bytes
+      }
+      catch {
+        Send-Html $response (Get-ErrorPage 500 "Internal Server Error") 500
+      }
+
+      #region Directory listing
+    }
+    elseif (Test-Path $resolved -PathType Container) {
+      $html = Get-DirectoryPage $rawPath $resolved
+      Send-Html $response $html
+
+    }
+    else {
+      Send-Html $response (Get-ErrorPage 404 "Not Found") 404
+    }
+  }
+}
+catch {
+  Write-Host "  ERROR: $_" -ForegroundColor Red
+}
+finally {
+  if ($listener.IsListening) { $listener.Stop() }
+  $listener.Dispose()
+  Write-Host ""
+  Write-Host "  Server stopped." -ForegroundColor Yellow
+  Write-Host ""
 }
 
 #endregion
