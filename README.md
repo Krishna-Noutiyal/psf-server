@@ -168,20 +168,10 @@ Press `Ctrl+C` in the terminal window where the server is running. The listener 
 
 ## Winget Portable
 
-Currently the project is under review for installation through winget. For development and upload to winget repository the `psfserver.go` can be compiled to .exe using :
+Currently the project is under review for installation through winget.
 
-```go
-go build -o psfserver.exe psfserver.go
-```
+> A standalone `psfserver.exe` has been created using **ps2exe** for winget installation
 
-The `psfserver.go` file is a wrapper for the actaull `psfserver.ps1` script. It runs the `psfserver.ps1` script and transfers all of the arguments to it as well. 
-
-This is done for complience with 
-`winget` packages structure.
-
-Later the `psfserver.exe` can be used to directly run the **PSFServer**. 
-
-> NOTE: the `psfserver.exe` and `psfserver.ps1` should exist on the same folder AND shell be executed with admin previlages.
 
 ## License
 
